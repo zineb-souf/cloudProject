@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+
+  auth-service:
+    build:
+      context: ./auth-service
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./auth-service:/var/www
+    depends_on:
+      - mysql-auth
+
+  delivery-service:
+    build:
+      context: ./delivery-service
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./delivery-service:/var/www
+    depends_on:
+      - mysql-delivery
+      - rabbitmq
+
+  notification-service:
+    build:
+      context: ./notification-service
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./notification-service:/var/www
+    depends_on:
+      - rabbitmq
+
+  mysql-auth:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_DATABASE: auth_db
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+
+  mysql-delivery:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_DATABASE: delivery_db
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3308:3306"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: always
+    ports:
+      - "5673:5672"   # ✅ CHANGÉ ICI
+      - "15673:15672" # ✅ CHANGÉ ICI
