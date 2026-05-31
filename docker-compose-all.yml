@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: delivery_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: delivery_service
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - delivery_network
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: delivery_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"      # AMQP port
+      - "15672:15672"    # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - delivery_network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: delivery_auth
+    environment:
+      APP_NAME: "Auth Service"
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_HOST: mysql
+      DB_DATABASE: auth_service
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+    networks:
+      - delivery_network
+    volumes:
+      - ./auth-service:/app
+
+  # Delivery Service
+  delivery-service:
+    build:
+      context: ./delivery-service
+      dockerfile: Dockerfile
+    container_name: delivery_app
+    environment:
+      APP_NAME: "Delivery Service"
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_HOST: mysql
+      DB_DATABASE: delivery_service
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    ports:
+      - "8001:8000"
+    depends_on:
+      - mysql
+      - rabbitmq
+    networks:
+      - delivery_network
+    volumes:
+      - ./delivery-service:/app
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: delivery_notification
+    environment:
+      APP_NAME: "Notification Service"
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_HOST: mysql
+      DB_DATABASE: notification_service
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    ports:
+      - "8002:8000"
+    depends_on:
+      - mysql
+      - rabbitmq
+    networks:
+      - delivery_network
+    volumes:
+      - ./notification-service:/app
+
+  # Notification Consumer (Long-running process)
+  notification-consumer:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: delivery_consumer
+    environment:
+      APP_NAME: "Notification Consumer"
+      APP_ENV: local
+      DB_HOST: mysql
+      DB_DATABASE: notification_service
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      - mysql
+      - rabbitmq
+      - notification-service
+    networks:
+      - delivery_network
+    volumes:
+      - ./notification-service:/app
+    command: php artisan rabbitmq:consume-delivery-notifications
+
+networks:
+  delivery_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  rabbitmq_data:
